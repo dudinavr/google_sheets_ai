@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Google Sheets Viewer с ИИ</title>
+    <link rel="stylesheet"
+      href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f9;
+            margin: 40px;
+        }
+
+        h2, h3 {
+            color: #333;
+        }
+
+        #sheetTable_wrapper {
+            margin-bottom: 30px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        #questionForm {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        #questionForm input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        #questionForm button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            border: none;
+            color: white;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        #questionForm button:hover {
+            background-color: #0056b3;
+        }
+
+        #answer {
+            background-color: #fff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            min-height: 60px;
+            border-radius: 5px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            font-size: 16px;
+            color: #333;
+        }
+
+        /* Сделаем таблицу немного красивее */
+        table.dataTable thead {
+            background-color: #007bff;
+            color: white;
+        }
+
+        table.dataTable tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        table.dataTable tbody tr:hover {
+            background-color: #e1f0ff;
+        }
+    </style>
+</head>
+<body>
+    <h2>📊 Таблица из Google Sheets</h2>
+    <table id="sheetTable" class="display"></table>
+
+    <!-- Форма для ввода вопроса -->
+    <h3>❓ Задайте вопрос об этих сервисах:</h3>
+    <form id="questionForm">
+        <input type="text" id="question" name="question" placeholder="Введите вопрос...">
+        <button type="submit">Спросить</button>
+        <button type="button" id="askStreamBtn">Спросить 2 (стрим)</button>
+    </form>
+
+    <!-- Блок для ответа -->
+    <h3>💬 Ответ ИИ:</h3>
+    <div id="answer"></div>
+
+    <script>
+        const sheetId = "1XLYtLDKuWEEls5baZ-w6iCptWa3subEnyoV1suo5jog";
+
+        fetch(`/sheet/${sheetId}`)
+            .then(res => res.json())
+            .then(data => {
+                const values = data.values;
+                const columns = values[0].map(col => ({title: col}));
+                const rows = values.slice(1);
+
+                $('#sheetTable').DataTable({
+                    data: rows,
+                    columns: columns
+                });
+            });
+
+        $("#questionForm").on("submit", async function(e) {
+            e.preventDefault();
+            const question = $("#question").val().trim();
+            if (!question) return alert("Введите вопрос!");
+
+            const answerDiv = $("#answer");
+            answerDiv.text("⏳ Думаю...");
+
+            const response = await fetch("/ask", {
+                method: "POST",
+                body: new URLSearchParams({ question })
+            });
+
+            const data = await response.json();
+            answerDiv.text(data.answer || "❌ Ошибка при получении ответа");
+        });
+
+        $("#askStreamBtn").on("click", async function() {
+            const question = $("#question").val().trim();
+            if (!question) return alert("Введите вопрос!");
+
+            const answerDiv = $("#answer");
+            answerDiv.text("⏳ Думаю...\n");
+
+            const response = await fetch("/ask_stream", {
+                method: "POST",
+                body: new URLSearchParams({ question })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            answerDiv.text(""); // очищаем перед стримом
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                answerDiv.text(answerDiv.text() + chunk);
+            }
+        });
+    </script>
+</body>
+</html>
